@@ -1,0 +1,124 @@
+{
+  "Mathematics for Machine Learning": {
+    "Linear Algebra": [
+      "Vector spaces",
+      "Linear dependence and independence",
+      "Subspaces",
+      "Basis and dimension",
+      "Linear transformations",
+      "Rank and nullity",
+      "Inner product spaces",
+      "Cauchy–Schwarz inequality",
+      "Orthogonal basis",
+      "Gram–Schmidt orthogonalization"
+    ],
+    "Matrix Algebra": [
+      "Eigenvalues",
+      "Eigenvectors",
+      "Cayley–Hamilton theorem",
+      "Matrix diagonalization",
+      "Quadratic form reduction",
+      "Sparse matrices",
+      "Permutation matrices",
+      "Hessenberg matrices"
+    ],
+    "Calculus for ML": [
+      "Limits and continuity",
+      "Derivatives",
+      "Extreme values of functions",
+      "Partial derivatives",
+      "Jacobians",
+      "Hessian matrix",
+      "Lagrange multipliers"
+    ],
+    "Numerical Methods": [
+      "Bisection method",
+      "Newton Raphson method",
+      "Interpolation methods",
+      "Numerical integration",
+      "Numerical solution of differential equations"
+    ]
+  },
+  "Machine Learning": {
+    "Machine Learning Fundamentals": {
+      "Supervised learning": [
+        "Regression",
+        "Linear regression",
+        "Polynomial regression",
+        "Classification",
+        "Logistic regression",
+        "Decision trees",
+        "Support vector machines",
+        "k-nearest neighbors",
+        "Overfitting",
+        "Underfitting",
+        "Cross validation",
+        "Bias variance tradeoff"
+      ],
+      "Unsupervised learning": [
+        "Clustering",
+        "k-means clustering",
+        "Hierarchical clustering",
+        "Density based clustering",
+        "Dimensionality reduction",
+        "Principal component analysis",
+        "Association rule learning"
+      ]
+    },
+    "Advanced Machine Learning": {
+      "Ensemble methods": [
+        "Bagging",
+        "Random forest",
+        "Boosting",
+        "AdaBoost",
+        "Gradient boosting"
+      ],
+      "Model selection": [
+        "Training validation testing split",
+        "Cross validation strategies",
+        "Evaluation metrics"
+      ],
+      "Hyperparameter tuning": [
+        "Grid search",
+        "Random search",
+        "Bayesian optimization",
+        "Early stopping"
+      ]
+    }
+  },
+  "Deep Learning": {
+    "Neural Networks": {
+      "Artificial neurons": [
+        "Perceptron",
+        "Weighted sum",
+        "Bias term",
+        "Neuron output"
+      ],
+      "Activation functions": [
+        "Sigmoid",
+        "Tanh",
+        "ReLU",
+        "Softmax",
+        "Leaky ReLU"
+      ],
+      "Feedforward networks": [
+        "Input layer",
+        "Hidden layers",
+        "Output layer",
+        "Forward propagation"
+      ],
+      "Backpropagation": [
+        "Error calculation",
+        "Gradient computation",
+        "Chain rule",
+        "Weight updates"
+      ],
+      "Gradient descent": [
+        "Batch gradient descent",
+        "Stochastic gradient descent",
+        "Mini batch gradient descent",
+        "Learning rate"
+      ]
+    }
+  }
+}
