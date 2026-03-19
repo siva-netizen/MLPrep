@@ -16,6 +16,17 @@ import curriculumData from "./curriculum.json";
 
 const COLLECTION_NAME = "users";
 const CURRICULUM_COLLECTION = "curriculum";
+const TOPIC_RESOURCES_COLLECTION = "topicResources";
+
+// Session-based cache for topic resources
+export let topicCache = {};
+
+/**
+ * Clear the topic cache (call this on logout)
+ */
+export const clearTopicCache = () => {
+  topicCache = {};
+};
 
 /**
  * Save user progress to Firestore
@@ -269,17 +280,21 @@ export const calculateStreak = (activity) => {
 
 /**
  * Save topic-specific resources (notes, links, attachments) to Firestore
+ * Uses a subcollection for scalability: users/{userId}/topicResources/{topicId}
  * @param {string} userId - User ID from Firebase Auth
  * @param {string} topicId - Normalized topic ID
  * @param {object} resources - Resources data { notes, links, attachments }
  */
 export const saveTopicResources = async (userId, topicId, resources) => {
   try {
-    const userDocRef = doc(db, COLLECTION_NAME, userId);
-    await updateDoc(userDocRef, {
-      [`resources.${topicId}`]: resources,
+    const resourceDocRef = doc(db, COLLECTION_NAME, userId, TOPIC_RESOURCES_COLLECTION, topicId);
+    await setDoc(resourceDocRef, {
+      ...resources,
       lastUpdated: new Date().toISOString(),
-    });
+    }, { merge: true });
+    
+    // Update cache
+    topicCache[topicId] = resources;
   } catch (error) {
     console.error("Error saving topic resources:", error);
     throw error;
@@ -293,13 +308,26 @@ export const saveTopicResources = async (userId, topicId, resources) => {
  */
 export const getTopicResources = async (userId, topicId) => {
   try {
-    const userDocRef = doc(db, COLLECTION_NAME, userId);
-    const userDoc = await getDoc(userDocRef);
-
-    if (userDoc.exists()) {
-      const resources = userDoc.data().resources || {};
-      return resources[topicId] || { notes: "", links: [], attachments: [] };
+    // Check cache first
+    if (topicCache[topicId]) {
+      return topicCache[topicId];
     }
+
+    const resourceDocRef = doc(db, COLLECTION_NAME, userId, TOPIC_RESOURCES_COLLECTION, topicId);
+    const resourceDoc = await getDoc(resourceDocRef);
+
+    if (resourceDoc.exists()) {
+      const data = resourceDoc.data();
+      const resources = {
+        notes: data.notes || "",
+        links: data.links || [],
+        attachments: data.attachments || []
+      };
+      // Update cache
+      topicCache[topicId] = resources;
+      return resources;
+    }
+    
     return { notes: "", links: [], attachments: [] };
   } catch (error) {
     console.error("Error getting topic resources:", error);

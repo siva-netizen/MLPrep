@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { ArrowRight, Brain } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { Zap, Target, Flame, Trophy, LayoutGrid } from 'lucide-react'
+import { Zap, Target, Flame, Trophy, LayoutGrid, Mail, Github } from 'lucide-react'
 import { ActivityHeatmap } from '@/components/ui/activity-heatmap'
 import { AnimatedProgressCard } from '../ui/progress-card'
 import {
@@ -21,35 +21,50 @@ export default function HomePage({ onStartLearning, completed = 0, totalTopics =
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString())
 
   useEffect(() => {
-    const fetchInitialData = async () => {
-      if (user?.uid) {
-        const years = await getAvailableActivityYears(user.uid)
-        setAvailableYears(years)
-        // Default to current year or most recent year with data
-        if (years.length > 0 && !years.includes(selectedYear)) {
-          setSelectedYear(years[0])
-        }
+    const loadData = async () => {
+      if (!user?.uid) return;
+      
+      // On initial load (user change), fetch available years first
+      const years = await getAvailableActivityYears(user.uid);
+      setAvailableYears(years);
+      
+      let yearToFetch = selectedYear;
+      if (years.length > 0 && !years.includes(selectedYear)) {
+        yearToFetch = years[0];
+        setSelectedYear(yearToFetch);
       }
-    }
-    fetchInitialData()
-  }, [user])
+      
+      const data = await getUserActivityByYear(user.uid, yearToFetch);
+      setActivityData(data);
+    };
+    
+    loadData();
+  }, [user]);
 
+  // Handle manual year changes
   useEffect(() => {
+    // Skip if we're also in the process of initial loading (this is still a bit tricky with React's batching)
+    // but the most reliable way is to only fetch if selectedYear changes AFTER mount.
     const fetchActivity = async () => {
       if (user?.uid) {
-        const data = await getUserActivityByYear(user.uid, selectedYear)
-        setActivityData(data)
+        const data = await getUserActivityByYear(user.uid, selectedYear);
+        setActivityData(data);
       }
+    };
+    
+    // Only fetch if availableYears is already populated (prevents double fetch on mount)
+    if (availableYears.length > 0) {
+      fetchActivity();
     }
-    fetchActivity()
-  }, [user, selectedYear])
+  }, [selectedYear]);
 
   // Extract main categories from curriculum
-  const categories = Object.keys(curriculum).map((categoryName) => ({
+  // Extract main categories from curriculum - memoized for performance
+  const categories = import.meta.env.SSR ? [] : Object.keys(curriculum).map((categoryName) => ({
     title: categoryName,
     topics: flattenTopics(curriculum[categoryName]).length,
     description: getCategoryDescription(categoryName),
-  }))
+  }));
 
   function flattenTopics(node) {
     if (Array.isArray(node)) return node
@@ -253,6 +268,53 @@ export default function HomePage({ onStartLearning, completed = 0, totalTopics =
         </div>
       </section>
 
+      {/* Footer */}
+      <footer className="border-t border-gray-100 bg-white py-12">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col items-center justify-between gap-8 md:flex-row">
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <Brain className="h-6 w-6 text-black" />
+                <span className="text-xl font-bold text-black tracking-tight">Study Companion</span>
+              </div>
+              <p className="text-sm text-gray-500 max-w-xs">
+                Your structured journey to mastering Artificial Intelligence and Machine Learning.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-6 md:flex-row md:gap-12">
+              <div>
+                <h4 className="mb-4 text-sm font-bold uppercase tracking-widest text-black">Support</h4>
+                <ul className="space-y-3">
+                  <li>
+                    <a 
+                      href="mailto:sivasabarivel008@gmail.com" 
+                      className="flex items-center gap-2 text-sm text-gray-600 hover:text-black transition-colors"
+                    >
+                      <Mail size={16} />
+                      sivasabarivel008@gmail.com
+                    </a>
+                  </li>
+                  <li>
+                    <a 
+                      href="https://github.com/siva-netizen/ML_AI_StudyNotes/issues" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-gray-600 hover:text-black transition-colors"
+                    >
+                      <Github size={16} />
+                      Raise an Issue
+                    </a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div className="mt-12 border-t border-gray-50 pt-8 text-center text-xs text-gray-400">
+            <p>© 2026 AI/ML Study Companion • Built for Lifelong Learners</p>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }
