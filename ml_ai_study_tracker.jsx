@@ -14,6 +14,7 @@ import {
   getUserProgress,
   getCurriculumFromFirestore,
   trackUserActivity,
+  clearTopicCache,
 } from "./firestoreUtils";
 import { TopicCard } from "@/components/ui/topic-card";
 import { getTopicStyling } from "@/lib/topicStyling";
@@ -26,25 +27,117 @@ function flattenTopics(node) {
   return [];
 }
 
+const curriculumTopics = flattenTopics(curriculum);
+
+const renderTree = (node, checked, toggleTopic, openNotes, openSections, toggleSection, parentName = "") => {
+  if (Array.isArray(node)) {
+    return (
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {node.map((sub) => {
+          const styling = getTopicStyling(sub);
+          return (
+            <TopicCard
+              key={sub}
+              category={parentName}
+              title={sub}
+              gradient={styling.gradient}
+              imageUrl={styling.image}
+              isCompleted={checked[sub] || false}
+              onToggle={() => toggleTopic(sub)}
+              onOpenNotes={() => openNotes(sub)}
+              className="hover:scale-[1.02] active:scale-[0.98] transition-transform"
+            />
+          );
+        })}
+      </div>
+    );
+  }
+
+  if (typeof node === "object") {
+    return Object.entries(node).map(([key, value]) => {
+      const isOpen = openSections[key];
+
+      return (
+        <div key={key} className="space-y-4">
+          <motion.div
+            layout
+            className={cn(
+              "overflow-hidden rounded-3xl border transition-all duration-500",
+              isOpen 
+                ? "bg-white border-gray-200 shadow-2xl shadow-gray-100 ring-1 ring-gray-50" 
+                : "bg-white/50 backdrop-blur-sm border-gray-100 hover:border-black/10 hover:shadow-xl hover:shadow-gray-100/50"
+            )}
+          >
+            <div
+              className={cn(
+                "flex justify-between items-center cursor-pointer p-6 select-none transition-colors",
+                isOpen ? "bg-gray-50/50" : "hover:bg-gray-50/20"
+              )}
+              onClick={() => toggleSection(key)}
+            >
+              <div className="flex items-center gap-5">
+                <div className={cn(
+                  "w-1.5 h-10 rounded-full transition-all duration-500",
+                  isOpen ? "bg-black scale-y-110" : "bg-gray-200"
+                )} />
+                <div>
+                  <h3 className={cn(
+                    "text-2xl font-black tracking-tight transition-colors",
+                    isOpen ? "text-black" : "text-gray-700"
+                  )}>{key}</h3>
+                  {!isOpen && <p className="text-sm text-gray-400 font-medium">Click to expand topics</p>}
+                </div>
+              </div>
+
+              <div className={cn(
+                "p-2.5 rounded-full transition-all duration-500",
+                isOpen ? "bg-black text-white rotate-180 shadow-lg shadow-black/20" : "bg-gray-100 text-gray-400"
+              )}>
+                <ChevronDown size={22} />
+              </div>
+            </div>
+
+            <motion.div
+              initial={false}
+              animate={{ 
+                height: isOpen ? "auto" : 0, 
+                opacity: isOpen ? 1 : 0,
+                scale: isOpen ? 1 : 0.98
+              }}
+              transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+              className="overflow-hidden"
+            >
+              <div className="p-6 pt-2 border-t border-gray-100/50">
+                <div className="mt-6">
+                  {renderTree(value, checked, toggleTopic, openNotes, openSections, toggleSection, key)}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        </div>
+      );
+    });
+  }
+
+  return null;
+};
+
 export default function StudyTracker() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showHome, setShowHome] = useState(!window.location.pathname.startsWith('/notes/')); // Show home only if not on a notes path
-  const allTopics = flattenTopics(curriculum);
+  const [progressLoaded, setProgressLoaded] = useState(false);
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+  const [hasStarted, setHasStarted] = useState(false);
+  const allTopics = curriculumTopics;
 
-  // Handle URL changes
+  // Handle URL changes - Single source of truth for routing
   useEffect(() => {
     const handleLocationChange = () => {
-      if (window.location.pathname.startsWith('/notes/')) {
-        setShowHome(false);
-      } else {
-        setShowHome(true);
-      }
+      setCurrentPath(window.location.pathname);
     };
 
     window.addEventListener('popstate', handleLocationChange);
-    // Initial check
-    handleLocationChange();
+    handleLocationChange(); // Initial check
 
     return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
@@ -65,14 +158,17 @@ export default function StudyTracker() {
         try {
           const userProgress = await getUserProgress(currentUser.uid);
           setChecked(userProgress);
+          setProgressLoaded(true);
           // Track visit/activity
           await trackUserActivity(currentUser.uid);
         } catch (error) {
           console.error("Error loading progress:", error);
+          setProgressLoaded(true); // Still mark as loaded to prevent overwrites
         }
       } else {
         setUser(null);
         setChecked({});
+        setProgressLoaded(false);
       }
       setLoading(false);
     });
@@ -82,7 +178,7 @@ export default function StudyTracker() {
 
   // Save progress to Firestore whenever it changes
   useEffect(() => {
-    if (user) {
+    if (user && progressLoaded) { // Guard saves until progress is loaded from Firestore
       const timer = setTimeout(async () => {
         try {
           await saveUserProgress(user.uid, checked);
@@ -93,7 +189,7 @@ export default function StudyTracker() {
 
       return () => clearTimeout(timer);
     }
-  }, [checked, user]);
+  }, [checked, user, progressLoaded]);
 
   if (loading) {
     return (
@@ -110,11 +206,15 @@ export default function StudyTracker() {
     return <LoginPage onAuthComplete={setUser} />;
   }
 
-  // Show home page if user is authenticated and showHome is true
-  if (showHome) {
+  // Conditional Rendering Logic
+  const isNotesPath = currentPath.startsWith('/notes/');
+  const isHomePath = currentPath === '/' || currentPath === '';
+
+  // Show landing page if at root and hasn't started learning yet
+  if (isHomePath && !hasStarted) {
     return (
       <HomePage 
-        onStartLearning={() => setShowHome(false)} 
+        onStartLearning={() => setHasStarted(true)} 
         completed={completed}
         totalTopics={totalTopics}
         user={user}
@@ -124,7 +224,7 @@ export default function StudyTracker() {
 
   // Handle Note Detail view
   const getTopicIdFromUrl = () => {
-    const match = window.location.pathname.match(/\/notes\/(.+)/);
+    const match = currentPath.match(/\/notes\/(.+)/);
     return match ? match[1] : null;
   };
 
@@ -139,8 +239,7 @@ export default function StudyTracker() {
         userId={user.uid}
         onBack={() => {
           window.history.pushState({}, '', '/');
-          const navEvent = new PopStateEvent('popstate');
-          window.dispatchEvent(navEvent);
+          window.dispatchEvent(new PopStateEvent('popstate'));
         }}
       />
     );
@@ -155,113 +254,28 @@ export default function StudyTracker() {
   };
 
   const openNotes = (topic) => {
-    const url = `/notes/${topic.replace(/\s+/g, "-").toLowerCase()}`;
-    window.location.href = url;
+    const topicId = topic.replace(/\s+/g, "-").toLowerCase();
+    const url = `/notes/${topicId}`;
+    window.history.pushState({}, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate'));
   };
 
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      clearTopicCache();
       setUser(null);
       setChecked({});
-      setShowHome(true); // Go back to home page on logout
+      setHasStarted(false); // Reset to landing page on logout
+      window.history.pushState({}, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
     } catch (error) {
       console.error("Error logging out:", error);
     }
   };
 
-  const renderNode = (node) => {
-    if (Array.isArray(node)) {
-      return (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {node.map((sub) => {
-            const styling = getTopicStyling(sub);
-            return (
-              <TopicCard
-                key={sub}
-                category={sub.split(" ").slice(0, 2).join(" ")}
-                title={sub}
-                gradient={styling.gradient}
-                imageUrl={styling.image}
-                isCompleted={checked[sub] || false}
-                onToggle={() => toggleTopic(sub)}
-                onOpenNotes={() => openNotes(sub)}
-                className="hover:scale-[1.02] active:scale-[0.98] transition-transform"
-              />
-            );
-          })}
-        </div>
-      );
-    }
-
-    if (typeof node === "object") {
-      return Object.entries(node).map(([key, value]) => {
-        const isOpen = openSections[key];
-
-        return (
-          <div key={key} className="space-y-4">
-            <motion.div
-              layout
-              className={cn(
-                "overflow-hidden rounded-3xl border transition-all duration-500",
-                isOpen 
-                  ? "bg-white border-gray-200 shadow-2xl shadow-gray-100 ring-1 ring-gray-50" 
-                  : "bg-white/50 backdrop-blur-sm border-gray-100 hover:border-black/10 hover:shadow-xl hover:shadow-gray-100/50"
-              )}
-            >
-              <div
-                className={cn(
-                  "flex justify-between items-center cursor-pointer p-6 select-none transition-colors",
-                  isOpen ? "bg-gray-50/50" : "hover:bg-gray-50/20"
-                )}
-                onClick={() => toggleSection(key)}
-              >
-                <div className="flex items-center gap-5">
-                  <div className={cn(
-                    "w-1.5 h-10 rounded-full transition-all duration-500",
-                    isOpen ? "bg-black scale-y-110" : "bg-gray-200"
-                  )} />
-                  <div>
-                    <h3 className={cn(
-                      "text-2xl font-black tracking-tight transition-colors",
-                      isOpen ? "text-black" : "text-gray-700"
-                    )}>{key}</h3>
-                    {!isOpen && <p className="text-sm text-gray-400 font-medium">Click to expand topics</p>}
-                  </div>
-                </div>
-
-                <div className={cn(
-                  "p-2.5 rounded-full transition-all duration-500",
-                  isOpen ? "bg-black text-white rotate-180 shadow-lg shadow-black/20" : "bg-gray-100 text-gray-400"
-                )}>
-                  <ChevronDown size={22} />
-                </div>
-              </div>
-
-              <motion.div
-                initial={false}
-                animate={{ 
-                  height: isOpen ? "auto" : 0, 
-                  opacity: isOpen ? 1 : 0,
-                  scale: isOpen ? 1 : 0.98
-                }}
-                transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-                className="overflow-hidden"
-              >
-                <div className="p-6 pt-2 border-t border-gray-100/50">
-                  <div className="mt-6">
-                    {renderNode(value)}
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
-          </div>
-        );
-      });
-    }
-
-    return null;
-  };
+  // Moved renderNode logic outside to renderTree for performance
+  const renderNode = (node, parentName) => renderTree(node, checked, toggleTopic, openNotes, openSections, toggleSection, parentName);
 
   return (
     <div className="min-h-screen bg-white relative overflow-hidden">
@@ -311,7 +325,7 @@ export default function StudyTracker() {
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setShowHome(true)}
+              onClick={() => setHasStarted(false)}
               className="flex items-center gap-2 bg-white border border-gray-200 hover:border-black text-black font-bold py-2 px-5 rounded-full transition-all text-sm"
             >
               Home
@@ -336,7 +350,7 @@ export default function StudyTracker() {
               </div>
 
               <div className="grid gap-6">
-                {renderNode(topics)}
+                {renderNode(topics, section)}
               </div>
             </section>
           ))}
